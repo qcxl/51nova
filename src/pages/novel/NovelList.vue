@@ -15,7 +15,9 @@
     </div>
   </div>
 </template>
-<script setup lang="ts">import TabNav from '@/components/TabNav.vue'</script>
+<script setup lang="ts">
+import TabNav from '@/components/TabNav.vue'
+</script>
 <style scoped>
 .page-container { max-width: 1400px; margin: 0 auto; width: 100%; }
 .page-content { padding: 0 20px; }

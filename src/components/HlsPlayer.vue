@@ -51,6 +51,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import Hls from 'hls.js'
+import { decodeM3u8 } from '@/utils/media'
 
 const props = defineProps<{
   src: string
@@ -93,18 +94,29 @@ async function loadSource() {
   error.value = ''
   isEnded.value = false
 
-  // 通过 Worker 获取解码后的 m3u8
-  const workerUrl = import.meta.env.PROD
-    ? `/m3u8?url=${encodeURIComponent(props.src)}`
-    : props.src
+  // 获取并解码 m3u8（前端直接处理双重 Base64）
+  async function getDecodedUrl(rawUrl: string): Promise<string> {
+    try {
+      const resp = await fetch(rawUrl)
+      const text = await resp.text()
+      const decoded = decodeM3u8(text)
+      // 用 Blob URL 让 Hls.js 加载解码后的内容
+      const blob = new Blob([decoded], { type: 'application/vnd.apple.mpegurl' })
+      return URL.createObjectURL(blob)
+    } catch {
+      // 解码失败则回退到原始 URL
+      return rawUrl
+    }
+  }
+  const playUrl = await getDecodedUrl(props.src)
 
   if (Hls.isSupported()) {
     hls = new Hls({
       enableWorker: true,
       lowLatencyMode: true,
-      backbufferLength: 30,
+      backBufferLength: 30,
     })
-    hls.loadSource(workerUrl)
+    hls.loadSource(playUrl)
     hls.attachMedia(video)
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       loading.value = false
@@ -118,7 +130,7 @@ async function loadSource() {
     })
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
     // Safari 原生 HLS 支持
-    video.src = workerUrl
+    video.src = playUrl
     video.addEventListener('loadedmetadata', () => { loading.value = false })
   } else {
     error.value = '浏览器不支持 HLS 播放'

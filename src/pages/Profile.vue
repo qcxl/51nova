@@ -25,7 +25,7 @@ import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 const router = useRouter()
 const store = useAppStore()
-function formatNum(n: number) { if (!n) return '0'; if (n >= 10000) return (n/10000).toFixed(1)+'万'; return n.toLocaleString() }
+function formatNum(n: number | undefined | null) { if (!n) return '0'; if (n >= 10000) return (n/10000).toFixed(1)+'万'; return n.toLocaleString() }
 function handleLogout() { store.logout(); router.push('/') }
 </script>
 <style scoped>

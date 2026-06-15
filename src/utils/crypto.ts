@@ -17,9 +17,16 @@ function bytesToStr(b: ArrayBuffer): string {
 
 function b64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'))
-  const bytes = new Uint8Array(bin.length)
+  const buf = new ArrayBuffer(bin.length)
+  const bytes = new Uint8Array(buf)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
   return bytes
+}
+
+/** Wrap Uint8Array as BufferSource for Web Crypto API */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toBuffer(data: Uint8Array): BufferSource {
+  return data as unknown as BufferSource
 }
 
 function bytesToB64(bytes: Uint8Array): string {
@@ -31,7 +38,7 @@ function bytesToB64(bytes: Uint8Array): string {
 async function importKey(keyData: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'raw',
-    keyData,
+    toBuffer(keyData),
     { name: 'AES-CBC' },
     false,
     ['encrypt', 'decrypt']
@@ -44,9 +51,9 @@ export async function aesEncrypt(plain: string): Promise<string> {
   const iv = strToBytes(IV_STR)
   const encoded = strToBytes(plain)
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-CBC', iv },
+    { name: 'AES-CBC', iv: toBuffer(iv) },
     key,
-    encoded
+    toBuffer(encoded)
   )
   return bytesToB64(new Uint8Array(encrypted))
 }
@@ -57,9 +64,9 @@ export async function aesDecrypt(b64Data: string): Promise<string> {
   const iv = strToBytes(IV_STR)
   const encrypted = b64ToBytes(b64Data)
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-CBC', iv },
+    { name: 'AES-CBC', iv: toBuffer(iv) },
     key,
-    encrypted
+    toBuffer(encrypted)
   )
   return bytesToStr(decrypted)
 }
@@ -67,7 +74,7 @@ export async function aesDecrypt(b64Data: string): Promise<string> {
 /** SHA-256 hex */
 export async function sha256(text: string): Promise<string> {
   const encoded = strToBytes(text)
-  const hash = await crypto.subtle.digest('SHA-256', encoded)
+  const hash = await crypto.subtle.digest('SHA-256', toBuffer(encoded))
   return Array.from(new Uint8Array(hash))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')

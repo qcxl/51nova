@@ -1,7 +1,7 @@
 /**
  * API 客户端
  * - 自动加密请求 / 解密响应
- * - 支持 Worker 代理（开发环境直连 / 生产环境走 Worker）
+ * - 前端直连上游 API（已支持跨域）
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios'
@@ -10,10 +10,15 @@ import { makePayload } from '@/utils/crypto'
 import { getDeviceId } from '@/utils/device'
 import { useAppStore } from '@/stores/app'
 
-// 生产环境走 Cloudflare Worker 代理
-const WORKER_URL = 'https://dy.24tv.cc.cd'
-const PROD_URL = import.meta.env.VITE_WORKER_URL || WORKER_URL
-const BASE_URL = import.meta.env.PROD ? PROD_URL : 'https://api3.fkxbvttqa.cc/api.php'
+// 上游 API 服务器列表（故障切换）
+const API_SERVERS = [
+  'https://api1.fkxbvttqa.cc/api.php',
+  'https://api3.fkxbvttqa.cc/api.php',
+  'https://bak.fxcvlyzc.cc/api.php',
+]
+function pickServer(): string {
+  return API_SERVERS[Math.floor(Math.random() * API_SERVERS.length)]
+}
 
 const client: AxiosInstance = axios.create({
   timeout: 15000,
@@ -23,14 +28,12 @@ const client: AxiosInstance = axios.create({
   },
 })
 
-/** GET 握手（首次调用必须） */
+/** GET 握手（所有环境都需要） */
 export async function bootstrap(): Promise<boolean> {
   const store = useAppStore()
   if (store.bootstrapped) return true
   try {
-    // 生产环境 Worker 代理会自动处理 GET 握手
-    if (import.meta.env.PROD) return true
-    await axios.get(BASE_URL, { timeout: 10000 })
+    await axios.get(pickServer(), { timeout: 10000 })
     store.bootstrapped = true
     return true
   } catch (e) {
@@ -52,10 +55,9 @@ export async function post<T = any>(
   // 首次请求前先握手
   if (!store.bootstrapped) await bootstrap()
 
-  // 构建 URL 和 payload
-  const url = import.meta.env.PROD
-    ? `${BASE_URL}?target=${encodeURIComponent(BASE_URL + path)}`
-    : BASE_URL + path
+  // 构建 URL（随机选一台服务器做故障切换）
+  const baseUrl = pickServer()
+  const url = baseUrl + path
 
   // 发送并解密
   async function send(): Promise<T> {

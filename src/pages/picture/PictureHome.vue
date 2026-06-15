@@ -14,14 +14,16 @@
 </template>
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { api } from '@/api/client'
+import { api, checkResponse } from '@/api/client'
 import TabNav from '@/components/TabNav.vue'
 const pictures = ref<any[]>([])
 onMounted(async () => {
   try {
     const resp = await api.pictureHome()
-    pictures.value = resp._decrypted?.data?.list || []
-  } catch {}
+    const { data, error: err } = checkResponse(resp)
+    if (err) { console.warn('PictureHome:', err); return }
+    pictures.value = (data as any)?.list || (data as any) || []
+  } catch (e: any) { console.warn('PictureHome error:', e.message) }
 })
 </script>
 <style scoped>

@@ -97,6 +97,28 @@ export async function post<T = any>(
   }
 }
 
+/**
+ * 检查 API 响应，返回统一格式
+ * - _decryptError → 解密错误
+ * - inner.status !== 1 → API 业务错误
+ */
+export function checkResponse<T = any>(resp: any): { data: T | null; error: string | null } {
+  if (resp._decryptError) {
+    return { data: null, error: `响应解密失败: ${resp._decryptError}` }
+  }
+  const inner = resp._decrypted
+  if (!inner) {
+    return { data: null, error: '响应无数据' }
+  }
+  if (inner.status !== 1) {
+    return { data: null, error: inner.msg || `API 返回异常 (status=${inner.status})` }
+  }
+  if (inner.crypt === true && typeof inner.data === 'string') {
+    return { data: null, error: '数据仍需二次解密 (crypt=true)，请联系开发者' }
+  }
+  return { data: inner.data as T, error: null }
+}
+
 /** 通用 API 封装（159 个端点） */
 export const api = {
   // ===== 配置 (2) =====
@@ -116,8 +138,8 @@ export const api = {
 
   // ===== Tab 导航 (3) =====
   followTab: () => post('/api/tabnew/follow_tab'),
-  listHyhMv: (nagId: number, sort = 'new', page = 1) =>
-    post('/api/tabnew/list_hyh_mv', { nag_id: nagId, sort, page }),
+  listHyhMv: (tabId: number, sort = 'new', page = 1) =>
+    post('/api/tabnew/list_hyh_mv', { tab_id: tabId, sort, page }),
   tabDetail: (id: number) => post('/api/tabnew/tab_detail', { id }),
 
   // ===== 短视频 (6) =====

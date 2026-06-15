@@ -38,7 +38,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { api } from '@/api/client'
+import { api, checkResponse } from '@/api/client'
 import TabNav from '@/components/TabNav.vue'
 
 const posts = ref<any[]>([])
@@ -51,8 +51,12 @@ async function fetchPosts() {
   loading.value = true; error.value = ''
   try {
     const resp = await api.communityHome()
-    posts.value = resp._decrypted?.data?.list || resp._decrypted?.data || []
-  } catch (e: any) { error.value = e.message || '加载失败' }
+    const { data, error: err } = checkResponse(resp)
+    if (err) { error.value = err; return }
+    posts.value = (data as any)?.list || (data as any) || []
+  } catch (e: any) {
+    error.value = e.response?.status === 503 ? 'API 服务器不可用' : (e.message || '加载失败')
+  }
   finally { loading.value = false }
 }
 

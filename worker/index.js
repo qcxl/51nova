@@ -30,6 +30,7 @@ const ALLOWED_ORIGINS = [
 let sessionCookies = ''
 let sessionTimestamp = 0
 const SESSION_TTL = 10 * 60 * 1000 // 10 分钟
+let sessionEstablished = false // 基于 IP 识别的 session
 
 /** 检查 Origin 是否在允许列表中 */
 function isOriginAllowed(origin) {
@@ -123,42 +124,59 @@ export default {
       }
     }
 
-    // ===== 通用 API 代理 =====
+    // ===== 通用 API 代理（故障切换 + 503 重试） =====
     if (path === '/api-proxy' && targetParam) {
       const apiPath = decodeURIComponent(targetParam)
-      try {
-        await ensureSession()
+      const bodyText = await request.text()
 
-        const serverIndex = Math.floor(Math.random() * API_SERVERS.length)
+      // 依次尝试服务器，遇到 503/空响应则重建 session 重试
+      for (let attempt = 0; attempt < API_SERVERS.length + 1; attempt++) {
+        const serverIndex = attempt < API_SERVERS.length ? attempt : 0
         const apiUrl = API_SERVERS[serverIndex]
+        try {
+          if (attempt > 0) {
+            // 重试时重建 session
+            sessionCookies = ''
+            sessionTimestamp = 0
+            sessionEstablished = false
+            await ensureSession()
+          } else {
+            await ensureSession()
+          }
 
-        // 使用 text() — 保留原始 URL-encoded 格式，避免 FormData→multipart 改变请求格式
-        const bodyText = await request.text()
-        const resp = await fetch(apiUrl + apiPath, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Cookie': sessionCookies,
-            'User-Agent': 'okhttp-okgo/jeasonlzy',
-          },
-          body: bodyText,
-        })
+          const resp = await fetch(apiUrl + apiPath, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Cookie': sessionCookies,
+              'User-Agent': 'okhttp-okgo/jeasonlzy',
+            },
+            body: bodyText,
+          })
 
-        const setCookie = resp.headers.get('Set-Cookie')
-        if (setCookie) {
-          sessionCookies = setCookie
-          sessionTimestamp = Date.now()
+          const setCookie = resp.headers.get('Set-Cookie')
+          if (setCookie) {
+            sessionCookies = setCookie
+            sessionTimestamp = Date.now()
+          }
+
+          const responseText = await resp.text()
+          // 上游 503 或空响应 → 重建 session 后重试（最多一次）
+          if (resp.status === 503 || !responseText) {
+            sessionCookies = ''
+            sessionTimestamp = 0
+            sessionEstablished = false
+            continue
+          }
+
+          return new Response(responseText, {
+            headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+          })
+        } catch (e) {
+          if (attempt >= API_SERVERS.length) {
+            return jsonResponse({ error: 'Proxy failed: ' + e.message }, 502, origin)
+          }
         }
-
-        const responseText = await resp.text()
-        return new Response(responseText, {
-          headers: {
-            ...corsHeaders(origin),
-            'Content-Type': 'application/json',
-          },
-        })
-      } catch (e) {
-        return jsonResponse({ error: 'Proxy failed' }, 502, origin)
       }
     }
 
@@ -171,13 +189,23 @@ export default {
 
 /** 确保 session 有效 */
 async function ensureSession() {
-  if (sessionCookies && (Date.now() - sessionTimestamp) < SESSION_TTL) return
+  if (sessionEstablished && (Date.now() - sessionTimestamp) < SESSION_TTL) return
   for (const server of API_SERVERS) {
     try {
-      const resp = await fetch(server, { method: 'GET' })
+      const resp = await fetch(server, {
+        method: 'GET',
+        headers: { 'User-Agent': 'okhttp-okgo/jeasonlzy' },
+      })
       const cookie = resp.headers.get('Set-Cookie')
       if (cookie) {
         sessionCookies = cookie
+        sessionTimestamp = Date.now()
+        sessionEstablished = true
+        return
+      }
+      // 无 Set-Cookie 但 GET 成功 → 基于 IP 识别的 session，标记有效
+      if (resp.ok) {
+        sessionEstablished = true
         sessionTimestamp = Date.now()
         return
       }

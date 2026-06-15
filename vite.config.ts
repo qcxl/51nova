@@ -4,8 +4,8 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [vue()],
-  // GitHub Pages project site — adjust if using custom domain
-  base: '/51nova-web/',
+  // GitHub Pages — user site (qcxl.github.io/51nova/)
+  base: '/51nova/',
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

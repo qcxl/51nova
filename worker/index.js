@@ -20,13 +20,13 @@ const API_SERVERS = [
   'https://bak.fxcvlyzc.cc/api.php',
 ]
 
-// 允许的来源域（生产环境替换为实际域名）
+// 允许的来源域
 const ALLOWED_ORIGINS = [
-  'https://weifeng.github.io',
-  'https://51nova.workers.dev',
+  'https://qcxl.github.io',
+  'https://51nova.qcxl.workers.dev',
   'http://localhost:3000',
   'http://localhost:5173',
-  null, // 允许无 Origin 头（直接调用）
+  null,
 ]
 
 // Cookie 缓存（全局变量）

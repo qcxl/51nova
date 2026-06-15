@@ -2,6 +2,7 @@
  * API 客户端
  * - 自动加密请求 / 解密响应
  * - 前端直连上游 API（已支持跨域）
+ * - 自动故障切换：首选 api3，失败后尝试 api1 → bak
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios'
@@ -10,37 +11,35 @@ import { makePayload } from '@/utils/crypto'
 import { getDeviceId } from '@/utils/device'
 import { useAppStore } from '@/stores/app'
 
-// 上游 API 服务器列表（故障切换）
+// 上游 API 服务器列表（按优先级排列，自动故障切换）
 const API_SERVERS = [
-  'https://api1.fkxbvttqa.cc/api.php',
   'https://api3.fkxbvttqa.cc/api.php',
+  'https://api1.fkxbvttqa.cc/api.php',
   'https://bak.fxcvlyzc.cc/api.php',
 ]
-function pickServer(): string {
-  return API_SERVERS[Math.floor(Math.random() * API_SERVERS.length)]
-}
 
 const client: AxiosInstance = axios.create({
-  timeout: 15000,
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/x-www-form-urlencoded',
-    'User-Agent': 'okhttp-okgo/jeasonlzy',
   },
 })
 
-/** GET 握手（所有环境都需要） */
+/** GET 握手 —— 依次尝试服务器 */
 export async function bootstrap(): Promise<boolean> {
   const store = useAppStore()
   if (store.bootstrapped) return true
-  try {
-    await axios.get(pickServer(), { timeout: 10000 })
-    store.bootstrapped = true
-    return true
-  } catch (e) {
-    console.warn('Bootstrap GET failed, continuing anyway:', e)
-    store.bootstrapped = true
-    return true
+  for (const server of API_SERVERS) {
+    try {
+      await axios.get(server, { timeout: 10000 })
+      store.bootstrapped = true
+      return true
+    } catch (e) {
+      console.warn(`Bootstrap GET failed for ${server}:`, e)
+    }
   }
+  store.bootstrapped = true
+  return true
 }
 
 /** POST 加密请求 */
@@ -55,34 +54,39 @@ export async function post<T = any>(
   // 首次请求前先握手
   if (!store.bootstrapped) await bootstrap()
 
-  // 构建 URL（随机选一台服务器做故障切换）
-  const baseUrl = pickServer()
-  const url = baseUrl + path
+  // 按优先级依次尝试服务器，直到成功
+  async function tryServers(serverIndex: number): Promise<T> {
+    const baseUrl = API_SERVERS[serverIndex]
+    const url = baseUrl + path
 
-  // 发送并解密
-  async function send(): Promise<T> {
-    const payload = await makePayload(extra, deviceId, token)
-    const resp = await client.post(url, payload)
-    const result = resp.data
+    try {
+      const payload = await makePayload(extra, deviceId, token)
+      const resp = await client.post(url, payload)
+      const result = resp.data
 
-    if (result.data && typeof result.data === 'string') {
-      const decrypted = await aesDecrypt(result.data)
-      result._decrypted = JSON.parse(decrypted)
+      if (result.data && typeof result.data === 'string') {
+        const decrypted = await aesDecrypt(result.data)
+        result._decrypted = JSON.parse(decrypted)
+      }
+      return result as T
+    } catch (e) {
+      const err = e as AxiosError
+      // 503 → 握手过期，重试握手
+      if (err.response?.status === 503) {
+        store.bootstrapped = false
+        await bootstrap()
+        return await tryServers(serverIndex)
+      }
+      // 有下一台服务器则切换重试
+      if (serverIndex < API_SERVERS.length - 1) {
+        console.warn(`Server ${baseUrl} failed, trying next...`, e)
+        return await tryServers(serverIndex + 1)
+      }
+      throw e
     }
-    return result as T
   }
 
-  try {
-    return await send()
-  } catch (e) {
-    const err = e as AxiosError
-    if (err.response?.status === 503) {
-      store.bootstrapped = false
-      await bootstrap()
-      return await send() // 重试一次
-    }
-    throw e
-  }
+  return await tryServers(0)
 }
 
 /** 通用 API 封装（66+ 端点） */

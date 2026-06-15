@@ -146,10 +146,10 @@ export const api = {
   videoDetail: (id: number) => post('/api/mv/detail', { id }),
   videoFavorite: (id: number) => post('/api/mv/favorite', { id }),
   videoComment: (id: number, content: string, replyId?: number) =>
-    post('/api/mv/add_comment', { id, content, reply_id: replyId }),
+    post('/api/mv/add_comment', { mv_id: id, comment: content, ...(replyId ? { c_id: replyId } : {}) }),
   videoComments: (id: number, page = 1) =>
-    post('/api/mv/list_comment', { id, page }),
-  videoBarrage: (id: number) => post('/api/mv/list_barrage', { id }),
+    post('/api/mv/list_comment', { mv_id: id, page }),
+  videoBarrage: (id: number) => post('/api/mv/list_barrage', { mv_id: id }),
   videoRank: () => post('/api/mv/list_rank_mv'),
 
   // ===== 图片 (7) =====
@@ -158,7 +158,7 @@ export const api = {
   pictureFavorite: (id: number) => post('/api/picture/favorite', { id }),
   pictureLike: (id: number) => post('/api/picture/like', { id }),
   pictureComment: (id: number, content: string) =>
-    post('/api/picture/comment', { id, content }),
+    post('/api/picture/comment', { picture_id: id, content }),
   pictureComments: (id: number, page = 1) =>
     post('/api/picture/comment_list', { id, page }),
   pictureFollowSeries: (id: number) => post('/api/picture/follow_series', { id }),
@@ -167,14 +167,14 @@ export const api = {
   novelHome: () => post('/api/novel/home'),
   novelDetail: (id: number) => post('/api/novel/detail', { id }),
   novelChapters: (id: number, page = 1) =>
-    post('/api/novel/chaptersList', { id, page }),
+    post('/api/novel/chaptersList', { id, page, limit: 10 }),
   novelChapter: (id: number, chapterId: number) =>
-    post('/api/novel/chapterDetail', { id, chapter_id: chapterId }),
+    post('/api/novel/chapterDetail', { novel_id: id, chapter_id: chapterId }),
   novelFavorite: (id: number) => post('/api/novel/favorite', { id }),
   novelLike: (id: number) => post('/api/novel/like', { id }),
   novelComment: (id: number, content: string) =>
     post('/api/novel/comment', { id, content }),
-  novelRecommend: () => post('/api/novel/recommend'),
+  novelRecommend: (id?: number) => post('/api/novel/recommend', id ? { novel_id: id } : {}),
   novelFindConf: () => post('/api/novel/find_conf'),
   novelFollowSeries: (id: number) => post('/api/novel/follow_series', { id }),
 
@@ -182,7 +182,7 @@ export const api = {
   audioHome: () => post('/api/audio/home'),
   audioDetail: (id: number) => post('/api/audio/detail', { id }),
   audioChapter: (id: number, chapterId: number) =>
-    post('/api/audio/chapterDetail', { id, chapter_id: chapterId }),
+    post('/api/audio/chapterDetail', { audio_id: id, chapter_id: chapterId }),
   audioFavorite: (id: number) => post('/api/audio/favorite', { id }),
   audioLike: (id: number) => post('/api/audio/like', { id }),
   audioDownload: (id: number, chapterId: number) =>
@@ -194,11 +194,11 @@ export const api = {
   seedNav: () => post('/api/seed/nav'),
   seedDetail: (id: number) => post('/api/seed/detail', { id }),
   seedComment: (id: number, content: string) =>
-    post('/api/seed/comment', { id, content }),
+    post('/api/seed/comment', { seed_id: id, content }),
   seedFavorite: (id: number) => post('/api/seed/favorite', { id }),
 
   // ===== 社区 (11) =====
-  communityHome: () => post('/api/community/home'),
+  communityHome: (pType = 0) => post('/api/community/home', { p_type: pType }),
   communityPost: (content: string, images?: string) =>
     post('/api/community/post', { content, images }),
   postDetail: (id: number) => post('/api/community/post_detail', { id }),
@@ -220,6 +220,54 @@ export const api = {
   taskList: () => post('/api/task/log_list'),
   taskGain: (id: number) => post('/api/task/gain', { id }),
   taskChange: (id: number) => post('/api/task/change', { id }),
+
+  // ===== 首页/推荐 (6) =====
+  recommendHomeDy: () => post('/api/recommend/homedy'),
+  recommendDiscover: (type = '', page = 1) => post('/api/recommend/discover', { type, page }),
+  recommendFollow: (type = '', page = 1) => post('/api/recommend/recommend_follow', { type, page }),
+  recommendIndexDy: (type = '', page = 1) => post('/api/recommend/indexdy', { type, page }),
+  videoRecommend: (id: number) => post('/api/mv/recommend', { id }),
+
+  // ===== 导航 (2) =====
+  navigationIndex: () => post('/api/navigation/index'),
+  navigationIndexAw: () => post('/api/navigation/index_aw'),
+
+  // ===== Tab 扩展 (3) =====
+  listConstruct: (nagId: number, sort = 'new', type = 'water', page = 1) =>
+    post('/api/tabnew/list_construct', { nag_id: nagId, sort, type, page, p_type: '1' }),
+  followMvList: (tag = 'new', page = 1) => post('/api/tabnew/follow_mv_list', { tag, page }),
+  listDiscovery: (sort = 'new', type = 'water', page = 1) => post('/api/tabnew/list_discovery', { sort, type, page }),
+
+  // ===== 广告 (1) =====
+  adsList: (type = 'hot', page = 1) => post('/api/home/ads_list', { type, page }),
+
+  // ===== SDK 事件 (1) =====
+  sdkEvent: () => post('/api/sdk/event'),
+
+  // ===== AI 导航 (1) =====
+  aiNav: () => post('/api/ai/ai_nav'),
+
+  // ===== 社区扩展 (3) =====
+  listPost: (pType = '0', tag = 'new', catId = '', page = 1) =>
+    post('/api/community/list_post', { p_type: pType, tag, cat_id: catId, page }),
+  listPostFollow: (pType = '0', tag = 'new', page = 1) =>
+    post('/api/community/list_post_follow', { p_type: pType, tag, page }),
+  topics: (tag = 'recommend', pId = '', pType = '0', more = 'no') =>
+    post('/api/community/topics', { tag, p_id: pId, p_type: pType, more }),
+
+  // ===== 图片扩展 (3) =====
+  pictureConstruct: (id: number, sort = 'hot', page = 1) =>
+    post('/api/picture/construct', { id, sort, page }),
+  listFollowPicture: (page = 1) => post('/api/picture/list_follow_picture', { page }),
+  pictureList: (id: number, page = 1) => post('/api/picture/picture_list', { id, page }),
+
+  // ===== 小说扩展 (2) =====
+  novelConstruct: (id: number, page = 1) => post('/api/novel/construct', { id, page }),
+  listFollowNovel: (page = 1) => post('/api/novel/list_follow_novel', { page }),
+
+  // ===== 音频扩展 (2) =====
+  audioConstruct: (id: number, page = 1) => post('/api/audio/construct', { id, page }),
+  listFollowAudio: (page = 1) => post('/api/audio/list_follow_audio', { page }),
 
   // 通用 POST
   post: post,

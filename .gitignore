@@ -10,3 +10,4 @@ worker/.wrangler/
 .gstack/
 .mcp.json
 归档/
+*.har

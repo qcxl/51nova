@@ -48,11 +48,9 @@ export function getKeyUrl(m3u8Content: string): { uri: string; iv: string } | nu
 /** 构造图片代理 URL（通过 Worker 解密） */
 export function buildImageProxyUrl(originalUrl: string): string {
   if (!originalUrl) return ''
-  if (import.meta.env.PROD) {
-    return `/image?url=${encodeURIComponent(originalUrl)}`
-  }
-  // 开发环境直接返回原 URL
-  return originalUrl
+  // 使用 Worker 的 /image 端点
+  const workerBase = import.meta.env.VITE_WORKER_URL || 'https://dy.24tv.cc.cd'
+  return `${workerBase}/image?url=${encodeURIComponent(originalUrl)}`
 }
 export function parseAuthKey(url: string): { timestamp: number; hash: string } | null {
   const match = url.match(/auth_key=(\d+)-[^-]+-[^-]+-([0-9a-f]+)/)

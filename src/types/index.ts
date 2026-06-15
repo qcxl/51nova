@@ -5,6 +5,7 @@ export interface ApiResponse<T = any> {
   timestamp: number
   sign: string
   _decrypted?: ApiInner<T>
+  _decryptError?: string // 解密失败时的错误信息（框架内用）
 }
 
 /** API 内层响应 */

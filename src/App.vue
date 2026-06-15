@@ -6,12 +6,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
+import { useAppStore } from '@/stores/app'
 
 const route = useRoute()
+const store = useAppStore()
 const showHeader = computed(() => !route.meta.hideHeader)
+
+// 初始化：GET 握手 → getconfig → base_info（自动注册设备）
+onMounted(() => {
+  store.initApp().then(ok => {
+    if (ok) console.log('App init OK')
+    else console.warn('App init failed (will retry on demand)')
+  })
+})
 </script>
 
 <style>

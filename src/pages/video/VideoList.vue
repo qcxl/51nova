@@ -65,20 +65,42 @@ async function changeSort(key: string) {
 async function fetchVideos() {
   loading.value = true; error.value = ''
   try {
-    // 尝试从视频列表接口获取，回退到热门发现
+    // 使用 tab_id 参数（与 API 文档一致），而非 nag_id
     const resp = await api.post('/api/tabnew/list_hyh_mv', {
-      nag_id: 3,
+      tab_id: 3,
       sort: currentSort.value,
       page: 1,
     })
-    videos.value = resp._decrypted?.data?.list || resp._decrypted?.data || []
-    if (videos.value.length === 0) {
-      // 回退：从推荐接口获取
-      const disc = await api.post('/api/recommend/discover', { page: 1 })
-      videos.value = disc._decrypted?.data?.list || []
+    // 检查内层状态
+    const inner = resp._decrypted
+    if (!inner) {
+      error.value = resp._decryptError || '响应解密失败'
+      return
     }
+    if (inner.status !== 1) {
+      error.value = inner.msg || `API 返回异常 (status=${inner.status})`
+      return
+    }
+    // 获取视频列表 — data 可能是 {list: [...]} 或 [...]
+    const rawData = inner.data
+    if (typeof rawData === 'string') {
+      error.value = '数据仍需二次解密 (crypt=true)，请联系开发者'
+      return
+    }
+    videos.value = rawData?.list || rawData || []
   } catch (e: any) {
-    error.value = e.message || '加载失败'
+    console.error('fetchVideos error:', e)
+    if (e.response) {
+      const status = e.response.status
+      if (status === 0) error.value = '网络错误 — 请检查 Worker 代理是否在线'
+      else if (status === 502) error.value = 'Worker 代理错误 — API 服务器拒绝连接'
+      else if (status === 503) error.value = 'API 服务器不可用 — 未建立会话或 IP 受限'
+      else error.value = `HTTP ${status}: ${e.message || '请求失败'}`
+    } else if (e.code === 'ERR_NETWORK') {
+      error.value = '网络不可达 — 请检查 Worker URL 配置 (VITE_WORKER_URL)'
+    } else {
+      error.value = e.message || '加载失败'
+    }
   } finally { loading.value = false }
 }
 

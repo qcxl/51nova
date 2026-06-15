@@ -6,7 +6,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios'
-import { aesDecrypt } from '@/utils/crypto'
+import { aesDecrypt, aes256CfbDecrypt } from '@/utils/crypto'
 import { makePayload } from '@/utils/crypto'
 import { getDeviceId } from '@/utils/device'
 import { useAppStore } from '@/stores/app'
@@ -54,9 +54,32 @@ export async function post<T = any>(
     const resp = await client.post(url, payload)
     const result = resp.data
 
+    // 尝试解密外层 data 字段
     if (result.data && typeof result.data === 'string') {
-      const decrypted = await aesDecrypt(result.data)
-      result._decrypted = JSON.parse(decrypted)
+      try {
+        const decrypted = await aesDecrypt(result.data)
+        const inner = JSON.parse(decrypted)
+        result._decrypted = inner
+
+        // crypt=true 时，内层 data 是 AES-256-CFB 加密字符串，需要二次解密
+        if (inner.crypt === true && typeof inner.data === 'string') {
+          try {
+            // 二次解密：AES-256-CFB + EVP_BytesToKey
+            const secondPass = 'JCQ0JBYRQBcXEkITQkATERQRHRI2MxcqCTw2FwEJ'
+            const decrypted2 = await aes256CfbDecrypt(inner.data, secondPass)
+            result._decrypted = {
+              ...inner,
+              data: JSON.parse(decrypted2),
+            }
+          } catch (e2: unknown) {
+            console.warn(`[crypt] 二次解密失败 (${path}):`, e2)
+          }
+        }
+      } catch (e: unknown) {
+        console.warn(`[API] 外层解密失败 (${path}):`, e)
+        result._decryptError = e instanceof Error ? e.message : String(e)
+        // 不抛异常 — 让调用方检查 _decrypted/_decryptError
+      }
     }
     return result as T
   }

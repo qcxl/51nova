@@ -10,7 +10,7 @@
 
 import { decryptImg2 } from './decrypt.js'
 
-	// 上游 API 服务器列表（故障切换）
+// 上游 API 服务器列表（故障切换）
 const API_SERVERS = [
   'https://api1.fkxbvttqa.cc/api.php',
   'https://api3.fkxbvttqa.cc/api.php',
@@ -132,7 +132,8 @@ export default {
         const serverIndex = Math.floor(Math.random() * API_SERVERS.length)
         const apiUrl = API_SERVERS[serverIndex]
 
-        const formData = await request.formData()
+        // 使用 text() — 保留原始 URL-encoded 格式，避免 FormData→multipart 改变请求格式
+        const bodyText = await request.text()
         const resp = await fetch(apiUrl + apiPath, {
           method: 'POST',
           headers: {
@@ -140,7 +141,7 @@ export default {
             'Cookie': sessionCookies,
             'User-Agent': 'okhttp-okgo/jeasonlzy',
           },
-          body: formData,
+          body: bodyText,
         })
 
         const setCookie = resp.headers.get('Set-Cookie')

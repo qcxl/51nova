@@ -19,14 +19,14 @@
 </template>
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { api } from '@/api/client'
+import { api, checkResponse } from '@/api/client'
 import TabNav from '@/components/TabNav.vue'
 const audios = ref<any[]>([])
 const loading = ref(true)
 onMounted(async () => {
   try {
     const resp = await api.audioHome()
-    audios.value = resp._decrypted?.data?.list || resp._decrypted?.data || []
+    const { data, error: e } = checkResponse(resp); if (e) { console.warn('AudioList:', e); return }; audios.value = data?.list || data || []
   } catch {}
   finally { loading.value = false }
 })

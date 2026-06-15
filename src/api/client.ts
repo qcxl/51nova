@@ -1,8 +1,8 @@
 /**
  * API 客户端
- * - 自动加密请求 / 解密响应
- * - 前端直连上游 API（已支持跨域）
- * - 自动故障切换：首选 api3，失败后尝试 api1 → bak
+ * - 加密请求 / 解密响应（与 APK 完全一致的加密体系）
+ * - 通过 Cloudflare Worker 代理（设置 Android UA，保持 session）
+ * - 浏览器 JS 无法直接设 User-Agent，因此必须走 Worker
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios'
@@ -11,12 +11,8 @@ import { makePayload } from '@/utils/crypto'
 import { getDeviceId } from '@/utils/device'
 import { useAppStore } from '@/stores/app'
 
-// 上游 API 服务器列表（按优先级排列，自动故障切换）
-const API_SERVERS = [
-  'https://api3.fkxbvttqa.cc/api.php',
-  'https://api1.fkxbvttqa.cc/api.php',
-  'https://bak.fxcvlyzc.cc/api.php',
-]
+// Cloudflare Worker 代理地址
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://dy.24tv.cc.cd'
 
 const client: AxiosInstance = axios.create({
   timeout: 20000,
@@ -25,24 +21,22 @@ const client: AxiosInstance = axios.create({
   },
 })
 
-/** GET 握手 —— 依次尝试服务器 */
+/** 通过 Worker 代理发送 GET 握手 */
 export async function bootstrap(): Promise<boolean> {
   const store = useAppStore()
   if (store.bootstrapped) return true
-  for (const server of API_SERVERS) {
-    try {
-      await axios.get(server, { timeout: 10000 })
-      store.bootstrapped = true
-      return true
-    } catch (e) {
-      console.warn(`Bootstrap GET failed for ${server}:`, e)
-    }
+  try {
+    // Worker 处理 /api-proxy 时会自动做 GET 握手
+    store.bootstrapped = true
+    return true
+  } catch (e) {
+    console.warn('Bootstrap failed:', e)
+    store.bootstrapped = true
+    return true
   }
-  store.bootstrapped = true
-  return true
 }
 
-/** POST 加密请求 */
+/** POST 加密请求 → 走 Worker 代理 */
 export async function post<T = any>(
   path: string,
   extra: Record<string, any> = {}
@@ -51,45 +45,36 @@ export async function post<T = any>(
   const deviceId = getDeviceId()
   const token = store.token
 
-  // 首次请求前先握手
   if (!store.bootstrapped) await bootstrap()
 
-  // 按优先级依次尝试服务器，直到成功
-  async function tryServers(serverIndex: number): Promise<T> {
-    const baseUrl = API_SERVERS[serverIndex]
-    const url = baseUrl + path
+  async function send(): Promise<T> {
+    const payload = await makePayload(extra, deviceId, token)
+    // Worker 接口: /api-proxy?target=API_PATH
+    const url = `${WORKER_URL}/api-proxy?target=${encodeURIComponent(path)}`
+    const resp = await client.post(url, payload)
+    const result = resp.data
 
-    try {
-      const payload = await makePayload(extra, deviceId, token)
-      const resp = await client.post(url, payload)
-      const result = resp.data
-
-      if (result.data && typeof result.data === 'string') {
-        const decrypted = await aesDecrypt(result.data)
-        result._decrypted = JSON.parse(decrypted)
-      }
-      return result as T
-    } catch (e) {
-      const err = e as AxiosError
-      // 503 → 握手过期，重试握手
-      if (err.response?.status === 503) {
-        store.bootstrapped = false
-        await bootstrap()
-        return await tryServers(serverIndex)
-      }
-      // 有下一台服务器则切换重试
-      if (serverIndex < API_SERVERS.length - 1) {
-        console.warn(`Server ${baseUrl} failed, trying next...`, e)
-        return await tryServers(serverIndex + 1)
-      }
-      throw e
+    if (result.data && typeof result.data === 'string') {
+      const decrypted = await aesDecrypt(result.data)
+      result._decrypted = JSON.parse(decrypted)
     }
+    return result as T
   }
 
-  return await tryServers(0)
+  try {
+    return await send()
+  } catch (e) {
+    const err = e as AxiosError
+    if (err.response?.status === 503) {
+      store.bootstrapped = false
+      await bootstrap()
+      return await send()
+    }
+    throw e
+  }
 }
 
-/** 通用 API 封装（66+ 端点） */
+/** 通用 API 封装（159 个端点） */
 export const api = {
   // ===== 配置 (2) =====
   getConfig: () => post('/api/home/getconfig'),

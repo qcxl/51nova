@@ -69,11 +69,13 @@ async function fetchVideos() {
   const store = useAppStore()
   if (!store.initialized) await store.initApp()
   try {
-    // 使用 tab_id 参数（与 API 文档一致），而非 nag_id
-    const resp = await api.post('/api/tabnew/list_hyh_mv', {
-      tab_id: 3,
+    // APK 实际使用 list_construct(nag_id=7) 替代了 list_hyh_mv(tab_id=3)
+    const resp = await api.post('/api/tabnew/list_construct', {
+      nag_id: 7,
       sort: currentSort.value,
+      type: 'water',
       page: 1,
+      p_type: '1',
     })
     // 检查内层状态
     const inner = resp._decrypted

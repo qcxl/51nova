@@ -41,9 +41,11 @@ export const useAppStore = defineStore('app', () => {
         }
 
         initialized.value = true
+        _initPromise = null // 成功后清除缓存，避免后续误用
         return true
       } catch (e) {
         console.warn('App init failed:', e)
+        _initPromise = null // 失败后清除缓存，允许下次重试
         return false
       }
     })()

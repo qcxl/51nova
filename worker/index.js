@@ -31,6 +31,7 @@ let sessionCookies = ''
 let sessionTimestamp = 0
 const SESSION_TTL = 10 * 60 * 1000 // 10 分钟
 let sessionEstablished = false // 基于 IP 识别的 session
+let activeServerIndex = 0 // 当前活跃服务器索引
 
 /** 检查 Origin 是否在允许列表中 */
 function isOriginAllowed(origin) {
@@ -161,8 +162,8 @@ export default {
           }
 
           const responseText = await resp.text()
-          // 上游 503 或空响应 → 重建 session 后重试（最多一次）
-          if (resp.status === 503 || !responseText) {
+          // 上游 503/403 或空响应 → 重建 session 后重试
+          if (resp.status === 503 || resp.status === 403 || resp.status === 401 || !responseText || responseText.includes('error code:')) {
             sessionCookies = ''
             sessionTimestamp = 0
             sessionEstablished = false

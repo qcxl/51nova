@@ -1,8 +1,8 @@
 name = "lucky-truth-cde2"
 main = "worker/index.js"
 compatibility_date = "2025-01-01"
+workers_dev = true
 
-[env.production]
 routes = [
   { pattern = "dy.24tv.cc.cd/*", zone_id = "" }
 ]

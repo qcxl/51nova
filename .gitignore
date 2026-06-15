@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.local
+.DS_Store
+*.log
+worker/.wrangler/
+.claude/
+.gstack/
+.mcp.json
+归档/

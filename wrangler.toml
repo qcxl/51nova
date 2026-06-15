@@ -1,8 +1,8 @@
-name = "51nova-api"
+name = "lucky-truth-cde2"
 main = "worker/index.js"
 compatibility_date = "2025-01-01"
 
 [env.production]
 routes = [
-  { pattern = "api.51nova.workers.dev", zone_id = "" }
+  { pattern = "dy.24tv.cc.cd/*", zone_id = "" }
 ]

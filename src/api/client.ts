@@ -11,9 +11,9 @@ import { getDeviceId } from '@/utils/device'
 import { useAppStore } from '@/stores/app'
 
 // 生产环境走 Cloudflare Worker 代理
-const BASE_URL = import.meta.env.PROD
-  ? '/api-proxy'
-  : 'https://api3.fkxbvttqa.cc/api.php'
+const WORKER_URL = 'https://dy.24tv.cc.cd'
+const PROD_URL = import.meta.env.VITE_WORKER_URL || WORKER_URL
+const BASE_URL = import.meta.env.PROD ? PROD_URL : 'https://api3.fkxbvttqa.cc/api.php'
 
 const client: AxiosInstance = axios.create({
   timeout: 15000,

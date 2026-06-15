@@ -1,8 +1,8 @@
 /**
- * API 客户端
+ * 51NOVA API 客户端
  * - 加密请求 / 解密响应（与 APK 完全一致的加密体系）
- * - 通过 Cloudflare Worker 代理（设置 Android UA，保持 session）
- * - 浏览器 JS 无法直接设 User-Agent，因此必须走 Worker
+ * - 直接连接 API 服务器（服务器已开启 CORS）
+ * - 内置多服务器故障切换
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios'
@@ -11,8 +11,13 @@ import { makePayload } from '@/utils/crypto'
 import { getDeviceId } from '@/utils/device'
 import { useAppStore } from '@/stores/app'
 
-// Cloudflare Worker 代理地址
-const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://dy.24tv.cc.cd'
+// API 服务器列表（从 getconfig 的 domain_name 字段获得）
+const API_SERVERS = [
+  'https://api1.fkxbvttqa.cc/api.php',
+  'https://api3.fkxbvttqa.cc/api.php',
+  'https://bak.fxcvlyzc.cc/api.php',
+]
+let activeServerIndex = 0
 
 const client: AxiosInstance = axios.create({
   timeout: 20000,
@@ -21,22 +26,7 @@ const client: AxiosInstance = axios.create({
   },
 })
 
-/** 通过 Worker 代理发送 GET 握手 */
-export async function bootstrap(): Promise<boolean> {
-  const store = useAppStore()
-  if (store.bootstrapped) return true
-  try {
-    // Worker 处理 /api-proxy 时会自动做 GET 握手
-    store.bootstrapped = true
-    return true
-  } catch (e) {
-    console.warn('Bootstrap failed:', e)
-    store.bootstrapped = true
-    return true
-  }
-}
-
-/** POST 加密请求 → 走 Worker 代理 */
+/** POST 加密请求 → 直接发送到 API 服务器 */
 export async function post<T = any>(
   path: string,
   extra: Record<string, any> = {}
@@ -45,62 +35,58 @@ export async function post<T = any>(
   const deviceId = getDeviceId()
   const token = store.token
 
-  if (!store.bootstrapped) await bootstrap()
-
   async function send(): Promise<T> {
     const payload = await makePayload(extra, deviceId, token)
-    // Worker 接口: /api-proxy?target=API_PATH
-    const url = `${WORKER_URL}/api-proxy?target=${encodeURIComponent(path)}`
-    const resp = await client.post(url, payload)
-    const result = resp.data
+    const url = `${API_SERVERS[activeServerIndex]}${path}`
 
-    // 尝试解密外层 data 字段
-    if (result.data && typeof result.data === 'string') {
-      try {
-        const decrypted = await aesDecrypt(result.data)
-        const inner = JSON.parse(decrypted)
-        result._decrypted = inner
+    try {
+      const resp = await client.post(url, payload)
+      const result = resp.data
 
-        // crypt=true 时，内层 data 是 AES-256-CFB 加密字符串，需要二次解密
-        if (inner.crypt === true && typeof inner.data === 'string') {
-          try {
-            // 二次解密：AES-256-CFB + EVP_BytesToKey
-            const secondPass = 'JCQ0JBYRQBcXEkITQkATERQRHRI2MxcqCTw2FwEJ'
-            const decrypted2 = await aes256CfbDecrypt(inner.data, secondPass)
-            result._decrypted = {
-              ...inner,
-              data: JSON.parse(decrypted2),
+      // 尝试解密外层 data 字段
+      if (result.data && typeof result.data === 'string') {
+        try {
+          const decrypted = await aesDecrypt(result.data)
+          const inner = JSON.parse(decrypted)
+          result._decrypted = inner
+
+          // crypt=true 时，内层 data 是 AES-256-CFB 加密字符串，需要二次解密
+          if (inner.crypt === true && typeof inner.data === 'string') {
+            try {
+              const secondPass = 'JCQ0JBYRQBcXEkITQkATERQRHRI2MxcqCTw2FwEJ'
+              const decrypted2 = await aes256CfbDecrypt(inner.data, secondPass)
+              result._decrypted = {
+                ...inner,
+                data: JSON.parse(decrypted2),
+              }
+            } catch (e2: unknown) {
+              console.warn(`[crypt] 二次解密失败 (${path}):`, e2)
             }
-          } catch (e2: unknown) {
-            console.warn(`[crypt] 二次解密失败 (${path}):`, e2)
           }
+        } catch (e: unknown) {
+          console.warn(`[API] 外层解密失败 (${path}):`, e)
+          result._decryptError = e instanceof Error ? e.message : String(e)
         }
-      } catch (e: unknown) {
-        console.warn(`[API] 外层解密失败 (${path}):`, e)
-        result._decryptError = e instanceof Error ? e.message : String(e)
-        // 不抛异常 — 让调用方检查 _decrypted/_decryptError
       }
+      return result as T
+    } catch (e) {
+      const err = e as AxiosError
+      if (err.response?.status === 503 || err.response?.status === 403 || err.response?.status === 0) {
+        // 当前服务器不可用，切换到下一个
+        const failedServer = activeServerIndex
+        activeServerIndex = (activeServerIndex + 1) % API_SERVERS.length
+        console.warn(`[API] 服务器 ${API_SERVERS[failedServer]} 不可用，切换到 ${API_SERVERS[activeServerIndex]}`)
+        return await send()  // 递归重试
+      }
+      throw e
     }
-    return result as T
   }
 
-  try {
-    return await send()
-  } catch (e) {
-    const err = e as AxiosError
-    if (err.response?.status === 503) {
-      store.bootstrapped = false
-      await bootstrap()
-      return await send()
-    }
-    throw e
-  }
+  return await send()
 }
 
 /**
  * 检查 API 响应，返回统一格式
- * - _decryptError → 解密错误
- * - inner.status !== 1 → API 业务错误
  */
 export function checkResponse<T = any>(resp: any): { data: T | null; error: string | null } {
   if (resp._decryptError) {

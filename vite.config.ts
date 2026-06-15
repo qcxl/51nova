@@ -4,8 +4,8 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [vue()],
-  // GitHub Pages — user site (qcxl.github.io/51nova/)
-  base: '/51nova/',
+  // 自定义域名 51dy.24tv.cc.cd，使用根路径
+  base: '/',
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

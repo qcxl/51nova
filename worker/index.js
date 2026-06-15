@@ -19,7 +19,7 @@ const API_SERVERS = [
 
 // 允许的来源域
 const ALLOWED_ORIGINS = [
-  'https://qcxl.github.io',
+  'https://51dy.24tv.cc.cd',
   'https://dy.24tv.cc.cd',
   'http://localhost:3000',
   'http://localhost:5173',

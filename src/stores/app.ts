@@ -5,6 +5,7 @@ import type { User, AppConfig } from '@/types'
 
 export const useAppStore = defineStore('app', () => {
   const bootstrapped = ref(false)
+  const initialized = ref(false)
   const token = ref(localStorage.getItem('51nova_token') || '')
   const user = ref<User | null>(null)
   const config = ref<AppConfig | null>(null)
@@ -12,26 +13,42 @@ export const useAppStore = defineStore('app', () => {
   const isLoggedIn = computed(() => !!token.value)
   const isVip = computed(() => user.value?.is_vip ?? false)
 
+  // 初始化 Promise 缓存，确保多个组件同时等待时只执行一次 init
+  let _initPromise: Promise<boolean> | null = null
+
   async function initApp(): Promise<boolean> {
-    try {
-      const configResp = await api.getConfig()
-      config.value = configResp._decrypted?.data || configResp
-      const infoResp = await api.baseInfo()
-      const raw = infoResp._decrypted?.data || infoResp
-      // crypt=true 响应可能自带 token
-      if (raw.token) {
-        token.value = raw.token
-        localStorage.setItem('51nova_token', raw.token)
+    // 已初始化完成则直接返回
+    if (initialized.value) return true
+    // 已有进行中的初始化则复用 Promise
+    if (_initPromise) return _initPromise
+
+    _initPromise = (async () => {
+      try {
+        // Step 1: getconfig
+        const configResp = await api.getConfig()
+        config.value = configResp._decrypted?.data || configResp
+
+        // Step 2: base_info（自动注册）
+        const infoResp = await api.baseInfo()
+        const raw = infoResp._decrypted?.data || infoResp
+        if (raw.token) {
+          token.value = raw.token
+          localStorage.setItem('51nova_token', raw.token)
+        }
+        user.value = {
+          ...raw,
+          _cached_at: infoResp._decrypted?.req_time || Date.now(),
+        }
+
+        initialized.value = true
+        return true
+      } catch (e) {
+        console.warn('App init failed:', e)
+        return false
       }
-      user.value = {
-        ...raw,
-        _cached_at: infoResp._decrypted?.req_time || Date.now(),
-      }
-      return true
-    } catch (e) {
-      console.warn('App init failed:', e)
-      return false
-    }
+    })()
+
+    return _initPromise
   }
 
   async function login(username: string, password: string): Promise<boolean> {
@@ -64,6 +81,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     bootstrapped,
+    initialized,
     token,
     user,
     config,

@@ -40,6 +40,7 @@
 import { ref, onMounted } from 'vue'
 import { api, checkResponse } from '@/api/client'
 import TabNav from '@/components/TabNav.vue'
+import { useAppStore } from '@/stores/app'
 
 const posts = ref<any[]>([])
 const loading = ref(true)
@@ -49,6 +50,9 @@ const postContent = ref('')
 
 async function fetchPosts() {
   loading.value = true; error.value = ''
+  // 等待 App 初始化完成（设备自动注册）
+  const store = useAppStore()
+  if (!store.initialized) await store.initApp()
   try {
     const resp = await api.communityHome()
     const { data, error: err } = checkResponse(resp)

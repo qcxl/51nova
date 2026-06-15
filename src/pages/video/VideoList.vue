@@ -42,6 +42,7 @@
 import { ref, onMounted } from 'vue'
 import { api } from '@/api/client'
 import TabNav from '@/components/TabNav.vue'
+import { useAppStore } from '@/stores/app'
 import type { Video } from '@/types'
 
 const sorts = [
@@ -64,6 +65,9 @@ async function changeSort(key: string) {
 
 async function fetchVideos() {
   loading.value = true; error.value = ''
+  // 等待 App 初始化完成（getconfig + base_info 自动注册）
+  const store = useAppStore()
+  if (!store.initialized) await store.initApp()
   try {
     // 使用 tab_id 参数（与 API 文档一致），而非 nag_id
     const resp = await api.post('/api/tabnew/list_hyh_mv', {

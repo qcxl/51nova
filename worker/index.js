@@ -10,10 +10,7 @@
 
 import { decryptImg2 } from './decrypt.js'
 
-// 图片解密密码（生产环境应使用 Workers Secrets）
-const IMG_PASSPHRASE = 'JCQ0JBYRQBcXEkITQkATERQRHRI2MxcqCTw2FwEJ'
-
-// 上游 API 服务器列表（故障切换）
+	// 上游 API 服务器列表（故障切换）
 const API_SERVERS = [
   'https://api1.fkxbvttqa.cc/api.php',
   'https://api3.fkxbvttqa.cc/api.php',
@@ -64,11 +61,12 @@ function jsonResponse(data, status = 200, origin) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url)
     const path = url.pathname
     const origin = request.headers.get('Origin')
     const targetParam = url.searchParams.get('target')
+    const IMG_PASSPHRASE = env?.IMG_PASSPHRASE || 'JCQ0JBYRQBcXEkITQkATERQRHRI2MxcqCTw2FwEJ'
 
     // ===== CORS 预检 =====
     if (request.method === 'OPTIONS') {
